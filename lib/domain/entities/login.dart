@@ -41,46 +41,47 @@ class LoginModel {
 }
 
 class Data {
-  Data(
-      {num? id,
-      String? fireStoreId,
-      String? firstName,
-      dynamic middle,
-      String? lastName,
-      String? email,
-      String? phone,
-      String? phoneCountry,
-      dynamic defaultCountry,
-      dynamic intro,
-      dynamic langauge,
-      dynamic country,
-      dynamic wallet,
-      String? otpValue,
-      String? token,
-      String? resetToken,
-      dynamic verified,
-      dynamic loginType,
-      String? birthdate,
-      dynamic socialId,
-      String? gender,
-      String? status,
-      String? createdAt,
-      String? updatedAt,
-      dynamic packageId,
-      dynamic fcm,
-      dynamic deviceId,
-      int? remainingItems,
-      Map<String, dynamic>? identityImage,
-      dynamic profileImage,
-      dynamic smsNotification,
-      dynamic emailNotification,
-      dynamic pushNotification,
-      dynamic firebaseAuth,
-      String? verificationDocumentStatus,
-      int? itemId,
-      dynamic itemTypeId}) {
+  Data({
+    num? id,
+    String? fireStoreId,
+    String? firstName,
+    dynamic middle,
+    String? lastName,
+    String? email,
+    String? phone,
+    String? phoneCountry,
+    dynamic defaultCountry,
+    dynamic intro,
+    dynamic langauge,
+    dynamic country,
+    dynamic wallet,
+    String? otpValue,
+    String? token,
+    String? resetToken,
+    dynamic verified,
+    dynamic loginType,
+    String? birthdate,
+    dynamic socialId,
+    String? gender,
+    dynamic status,
+    String? createdAt,
+    String? updatedAt,
+    dynamic packageId,
+    dynamic fcm,
+    dynamic deviceId,
+    int? remainingItems,
+    Map<String, dynamic>? identityImage,
+    dynamic profileImage,
+    dynamic smsNotification,
+    dynamic emailNotification,
+    dynamic pushNotification,
+    dynamic firebaseAuth,
+    String? verificationDocumentStatus,
+    int? itemId,
+    dynamic itemTypeId,
+  }) {
     _id = id;
-    _fireStoreId=fireStoreId;
+    _fireStoreId = fireStoreId;
     _firstName = firstName;
     _middle = middle;
     _lastName = lastName;
@@ -96,11 +97,11 @@ class Data {
     _otpValue = otpValue;
     _token = token;
     _resetToken = resetToken;
-    _verified = verified;
+    _verifiedRaw = verified;
     _loginType = loginType;
     _birthdate = birthdate;
     _socialId = socialId;
-    _status = status;
+    _statusRaw = status;
     _createdAt = createdAt;
     _updatedAt = updatedAt;
     _packageId = packageId;
@@ -115,11 +116,13 @@ class Data {
     _verificationDocumentStatus = verificationDocumentStatus;
     _itemId = itemId;
     _itemTypeId = itemTypeId;
+
+    // Garantir que os campos numéricos existam e convertemos abaixo em fromJson também
   }
 
   Data.fromJson(dynamic json) {
     _id = json['id'];
-    _fireStoreId=json["firestore_id"];
+    _fireStoreId = json["firestore_id"];
     _firstName = json['first_name'];
     _middle = json['middle'];
     _lastName = json['last_name'];
@@ -135,42 +138,39 @@ class Data {
     _otpValue = json['otp_value'];
     _token = json['token'];
     _resetToken = json['reset_token'];
-    _verified = json['verified'];
+
+    // Campos que podem vir como string ou número — ler de forma segura:
+    _verifiedRaw = json['verified'];
     _loginType = json['login_type'];
     _birthdate = json['birthdate'];
     _socialId = json['social_id'];
-    _status = json['status'];
+
+    // status/document fields que precisamos garantidos como ints
+    _statusRaw = json['status'];
     _createdAt = json['created_at'];
     _updatedAt = json['updated_at'];
     _packageId = json['package_id'];
     _fcm = json['fcm'];
     _deviceId = json['device_id'];
-    _identityImage = json['identity_image'] is Map<String, dynamic>
-        ? json['identity_image']
-        : null;
+    _identityImage =
+        json['identity_image'] is Map<String, dynamic> ? json['identity_image'] : null;
     _profileImage = json['profile_image'];
     _smsNotification = json['sms_notification'];
     _emailNotification = json['email_notification'];
-    remainingItems = json['remaining_items'];
+    remainingItems = json['remaining_items'] is int ? json['remaining_items'] : int.tryParse(json['remaining_items']?.toString() ?? '') ?? _remainingItems;
     _pushNotification = json['push_notification'];
     _firebaseAuth = json['firebase_auth'];
-    final rawVerificationStatus = json['verification_document_status'];
-    if (rawVerificationStatus == null) {
-      _verificationDocumentStatus = null;
-    } else {
-      final s = rawVerificationStatus.toString().toLowerCase().trim();
-      if (s == '1' || s == 'approved' || s == 'true') {
-        _verificationDocumentStatus = 'approved';
-      } else if (s == '0' || s == 'pending' || s == 'false') {
-        _verificationDocumentStatus = 'pending';
-      } else {
-        _verificationDocumentStatus = s;
-      }
-    }
-    _itemId = json['item_id'];
+    _verificationDocumentStatus = json['verification_document_status'];
+    _itemId = json['item_id'] is int ? json['item_id'] : int.tryParse(json['item_id']?.toString() ?? '') ?? _itemId;
     _itemTypeId = json['item_type_id'];
+
+    // --- Normalização dos campos de aprovação para inteiros 0/1 ---
+    _documentVerify = _normalize(json['document_verify']);
+    _verifiedStatus = _normalize(json['verified']);
+    _accountStatus = _normalize(json['status']);
   }
 
+  // Campos originais
   num? _id;
   String? _fireStoreId;
   String? _firstName;
@@ -188,11 +188,11 @@ class Data {
   String? _otpValue;
   String? _token;
   String? _resetToken;
-  dynamic _verified;
+  dynamic _verifiedRaw;
   dynamic _loginType;
   String? _birthdate;
   dynamic _socialId;
-  String? _status;
+  dynamic _statusRaw;
   String? _createdAt;
   String? _updatedAt;
   dynamic _packageId;
@@ -210,8 +210,29 @@ class Data {
   int? _itemId;
   dynamic _itemTypeId;
 
+  // Novos campos inteiros que o app precisa
+  int _documentVerify = 0;
+  int _verifiedStatus = 0;
+  int _accountStatus = 0;
+
+  int _normalize(dynamic v) {
+    if (v == null) return 0;
+
+    // valores explicitamente aprovados
+    if (v == 1 || v == true) return 1;
+
+    final String s = v.toString().toLowerCase().trim();
+    if (s == '1' || s == 'yes' || s == 'approved' || s == 'true') {
+      return 1;
+    }
+
+    // qualquer outro valor é tratado como não aprovado (0)
+    return 0;
+  }
+
+  // Getters originais
   num? get id => _id;
-  String? get fireStoreId =>_fireStoreId;
+  String? get fireStoreId => _fireStoreId;
   String? get firstName => _firstName;
   dynamic get middle => _middle;
   String? get lastName => _lastName;
@@ -228,11 +249,12 @@ class Data {
   String? get otpValue => _otpValue;
   String? get token => _token;
   String? get resetToken => _resetToken;
-  String? get verified => _verified;
+  // keep old raw getter for compatibility if something uses it
+  dynamic get verifiedRaw => _verifiedRaw;
   dynamic get loginType => _loginType;
   String? get birthdate => _birthdate;
   dynamic get socialId => _socialId;
-  String? get status => _status;
+  dynamic get statusRaw => _statusRaw;
   String? get createdAt => _createdAt;
   String? get updatedAt => _updatedAt;
   dynamic get packageId => _packageId;
@@ -245,12 +267,18 @@ class Data {
   dynamic get pushNotification => _pushNotification;
   dynamic get firebaseAuth => _firebaseAuth;
   int? get remainingItem => _remainingItems;
-  String? get verificationDocumentStatus  => _verificationDocumentStatus;
+  String? get verificationDocumentStatus => _verificationDocumentStatus;
   // ignore: unnecessary_getters_setters
   int? get itemId => _itemId;
   // ignore: unnecessary_getters_setters
   dynamic get itemTypeId => _itemTypeId;
 
+  // Novos getters que o app deve usar
+  int get documentVerify => _documentVerify;
+  int get verifiedStatus => _verifiedStatus;
+  int get accountStatus => _accountStatus;
+
+  // setters (mantive os seus)
   set itemDocumentStatus(String? itemDocumentStatus) =>
       _verificationDocumentStatus = itemDocumentStatus;
 
@@ -297,7 +325,7 @@ class Data {
   }
 
   set countrySetter(value) {
-    _country = value;
+    _country = country;
   }
 
   set identitySetter(value) {
@@ -323,7 +351,7 @@ class Data {
   Map<String, dynamic> toJson() {
     final map = <String, dynamic>{};
     map['id'] = _id;
-    map["firestore_id"]=_fireStoreId;
+    map["firestore_id"] = _fireStoreId;
     map['first_name'] = _firstName;
     map['middle'] = _middle;
     map['last_name'] = _lastName;
@@ -339,11 +367,11 @@ class Data {
     map['gender'] = _gender;
     map['token'] = _token;
     map['reset_token'] = _resetToken;
-    map['verified'] = _verified;
+    map['verified'] = _verifiedRaw;
     map['login_type'] = _loginType;
     map['birthdate'] = _birthdate;
     map['social_id'] = _socialId;
-    map['status'] = _status;
+    map['status'] = _statusRaw;
     map['created_at'] = _createdAt;
     map['updated_at'] = _updatedAt;
     map['package_id'] = _packageId;
@@ -352,13 +380,19 @@ class Data {
     map['identity_image'] = _identityImage;
     map['remaining_items'] = remainingItems;
     map['profile_image'] = _profileImage;
-    map['sms_notification'] = smsNotification;
-    map['email_notification'] = emailNotification;
-    map['push_notification'] = pushNotification;
-    map['firebase_auth'] = firebaseAuth;
+    map['sms_notification'] = _smsNotification;
+    map['email_notification'] = _emailNotification;
+    map['push_notification'] = _pushNotification;
+    map['firebase_auth'] = _firebaseAuth;
     map['verification_document_status'] = _verificationDocumentStatus;
     map['item_id'] = _itemId;
     map['item_type_id'] = _itemTypeId;
+
+    // adicionar os campos inteiros no JSON que o app precisa
+    map['document_verify'] = _documentVerify;
+    map['verified_int'] = _verifiedStatus; // mantenho both se quiser compatibilidade
+    map['status_int'] = _accountStatus;
+
     return map;
   }
 }
